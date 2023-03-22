@@ -28,7 +28,7 @@ def wait_for_search_bar():
 
 
 def input_company_name():
-    name = "Premium Solutions"  # Debug
+    name = "Premium solutions"  # Debug
     # name = input("Input company name: ")
     return name
 
@@ -49,14 +49,6 @@ def operate_search_bar():
     search = find_search_bar()
     search.send_keys(company_name)
     search.send_keys(Keys.ENTER)
-
-
-def check_if_search_correct(search):
-    try:
-        assert company_name in search
-    except:
-        return 0
-    return 1
 
 
 def check_if_valid():
@@ -119,8 +111,6 @@ def operate_map_search(link_value):
             print("\n")
             x += 1
 
-        # print(hit_urls[-1])
-        # open_hit_page(hit_urls[-1])
         check_hits(hit_urls)
     else:
         print("Not working")
@@ -136,7 +126,7 @@ def check_hits(hit_list):
         iterator += 1
 
 
-def open_hit_page(hit):  # ToDo Implement function
+def open_hit_page(hit):
     driver.get(hit)
     try:
         source = driver.page_source.lower()
@@ -152,13 +142,24 @@ def open_hit_page(hit):  # ToDo Implement function
         driver.close()
 
 
+def load_keywords(): # ToDo Fix error when words in list.txt are in two or more separate lines
+    file_name = 'list.txt'
+    contents = ""
+    with open(file_name, encoding='utf8') as f:
+        for line in f:
+            contents += line
+            print(f"Loaded keywords: {contents}")
+    key_list = contents.split()
+    return key_list
+
+
 def main():
     global driver, company_name, keyword_list
 
     driver = webdriver.Chrome()
     # initialize_webdriver() # ToDo make it work
     company_name = input_company_name()
-    keyword_list = ["cnc", "solidcam", "solidworks"]  # ToDo Do integration with external text file containing keywords
+    keyword_list = load_keywords()
     search_target()
 
     if check_if_valid():
