@@ -1,5 +1,3 @@
-# import time
-
 from selenium import webdriver
 from selenium.webdriver import Keys
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,7 +11,7 @@ def search_target():
     operate_search_bar()
 
 
-def initialize_webdriver():
+def initialize_webdriver():  # ToDo Make it work
     driver = webdriver.Chrome()
     driver.maximize_window()
     # return initialized_driver
@@ -30,7 +28,7 @@ def wait_for_search_bar():
 
 
 def input_company_name():
-    name = "Premium Solutions" # Debug
+    name = "Premium Solutions"  # Debug
     # name = input("Input company name: ")
     return name
 
@@ -73,7 +71,7 @@ def check_if_valid():
     return 1
 
 
-def open_similiar_search():  # ToDo Separate to smaller functions
+def open_similar_search():  # ToDo Separate to smaller functions and rename
     search = driver.find_elements(By.CLASS_NAME, 'sATSHe')
     search = search[-1]
 
@@ -110,30 +108,61 @@ def operate_map_search(link_value):
         x = 0
 
         potential_hits = driver.find_elements(By.CSS_SELECTOR, "a.yYlJEf.Q7PwXb.L48Cpd.brKmxb")
-        print(len(potential_hits))
+        print(f"Results found: {len(potential_hits)}")
         # time.sleep(5) # Use only to debug
         while iterator < len(potential_hits):
             hit_urls.append(potential_hits[iterator].get_attribute("href"))
             iterator += 1
 
-        while x < len(hit_urls):
+        while x < len(hit_urls):  # Used only for debug
             print(hit_urls[x])
             print("\n")
             x += 1
+
+        # print(hit_urls[-1])
+        # open_hit_page(hit_urls[-1])
+        check_hits(hit_urls)
     else:
         print("Not working")
 
 
+def check_hits(hit_list):
+    iterator = 0
+    for i in hit_list:
+        if open_hit_page(hit_list[iterator]):
+            print(f"Hit {hit_list[iterator]} is good \n")
+        else:
+            print(f"Hit {hit_list[iterator]} is not good \n")
+        iterator += 1
+
+
+def open_hit_page(hit):  # ToDo Implement function
+    driver.get(hit)
+    try:
+        source = driver.page_source.lower()
+        iterator = 0
+
+        for x in keyword_list:
+            if keyword_list[iterator] in source:
+                return 1
+            iterator += 1
+        return 0
+    except:
+        print(f"Error while opening {hit}")
+        driver.close()
+
+
 def main():
-    global driver, company_name
+    global driver, company_name, keyword_list
 
     driver = webdriver.Chrome()
     # initialize_webdriver() # ToDo make it work
     company_name = input_company_name()
+    keyword_list = ["cnc", "solidcam", "solidworks"]  # ToDo Do integration with external text file containing keywords
     search_target()
 
     if check_if_valid():
-        open_similiar_search()
+        open_similar_search()
     driver.close()
 
 
