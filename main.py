@@ -30,19 +30,19 @@ class KeywordsSelector:
         return self._keywords
 
 
-class TextFileSelector:
-    file_name = 'list.txt'
-
-
 class CompanyNameSelector:
     _company_name = ""
 
     def set_company_name(self):
         # self.company_name = input("Set company name: ")
-        self._company_name = "Premium Solutions"  # Used only for Debug
+        self._company_name = "NSI Glogow"  # Used only for Debug
 
     def get_company_name(self):
         return self._company_name
+
+
+class TextFileSelector:
+    file_name = 'list.txt'
 
 
 class CookieSelector:
@@ -89,7 +89,7 @@ class BasePage:
 
     def search_target(self, company_name_initializer):
         self.open_base_page()
-        # self.wait_for_search_bar()
+        self.wait_for_search_bar()
         self.operate_search_bar(company_name_initializer.get_company_name())
 
     def find_search_bar(self):
