@@ -5,166 +5,229 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 
 
-def search_target():
-    open_google()
-    wait_for_search_bar()
-    operate_search_bar()
+class Driver:
+    driver = None
+
+    def __init__(self):
+        self.driver = webdriver.Chrome()
 
 
-def initialize_webdriver():  # ToDo Make it work
-    driver = webdriver.Chrome()
-    driver.maximize_window()
-    # return initialized_driver
+class KeywordsSelector:
+    _keywords = None
+
+    def set_keywords(self):  # ToDo Fix error when words in list.txt are in two or more separate lines
+        file_name = TextFileSelector.file_name
+        contents = ""
+        with open(file_name, encoding='utf8') as f:
+            for line in f:
+                contents += line
+                print(f"Loaded keywords: {contents}")
+        self._keywords = contents.split()
+
+    def get_keywords(self):
+        return self._keywords
 
 
-def wait_for_search_bar():
-    try:
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "q"))
-        )
-    except:
-        print("Search bar not found, quiting")
-        driver.quit()
-
-
-def input_company_name():
-    name = "Premium solutions"  # Debug
-    # name = input("Input company name: ")
-    return name
-
-
-def find_search_bar():
-    search = driver.find_element(By.NAME, "q")
-    return search
-
-
-def open_google():
-    driver.get("https://www.google.com/")
-    search_bar = driver.find_element(By.ID, "L2AGLb")  # Accept cookies
-    search_bar.send_keys(Keys.ENTER)
-    return search_bar
-
-
-def operate_search_bar():
-    search = find_search_bar()
-    search.send_keys(company_name)
-    search.send_keys(Keys.ENTER)
-
-
-def check_if_valid():
-    try:
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "sATSHe"))
-        )
-        # driver.find_elements(By.CLASS_NAME, "liYKde g VjDLd") # ToBe Deleted
-    except:
-        print("Unable to find company card")
-        return 0
-    return 1
-
-
-def open_similar_search():  # ToDo Separate to smaller functions and rename
-    search = driver.find_elements(By.CLASS_NAME, 'sATSHe')
-    search = search[-1]
-
-    link = search.find_element(By.TAG_NAME, "a")
-    link_value = link.get_attribute("href")
-
-    print(link_value)  # Only Debug
-    operate_map_search(link_value)
-
-
-def check_if_on_correct_page():
-    try:
-        is_page_found = 1
-        if WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.liYKde.g.VjDLd"))
-        ):
-            print("Unable to locate corresponding map page")
-            is_page_found = 0
-    finally:
-        if not is_page_found:
-            print("No map page!")
-            return 0
-        else:
-            print("Proceeding")
-            return 1
-
-
-def operate_map_search(link_value):
-    driver.get(link_value)
-    if check_if_on_correct_page():
-        print("Working")
-        hit_urls = []
-        iterator = 0
-        x = 0
-
-        potential_hits = driver.find_elements(By.CSS_SELECTOR, "a.yYlJEf.Q7PwXb.L48Cpd.brKmxb")
-        print(f"Results found: {len(potential_hits)}")
-        # time.sleep(5) # Use only to debug
-        while iterator < len(potential_hits):
-            hit_urls.append(potential_hits[iterator].get_attribute("href"))
-            iterator += 1
-
-        while x < len(hit_urls):  # Used only for debug
-            print(hit_urls[x])
-            print("\n")
-            x += 1
-
-        check_hits(hit_urls)
-    else:
-        print("Not working")
-
-
-def check_hits(hit_list):
-    iterator = 0
-    for i in hit_list:
-        if open_hit_page(hit_list[iterator]):
-            print(f"Hit {hit_list[iterator]} is good \n")
-        else:
-            print(f"Hit {hit_list[iterator]} is not good \n")
-        iterator += 1
-
-
-def open_hit_page(hit):
-    driver.get(hit)
-    try:
-        source = driver.page_source.lower()
-        iterator = 0
-
-        for x in keyword_list:
-            if keyword_list[iterator] in source:
-                return 1
-            iterator += 1
-        return 0
-    except:
-        print(f"Error while opening {hit}")
-        driver.close()
-
-
-def load_keywords(): # ToDo Fix error when words in list.txt are in two or more separate lines
+class TextFileSelector:
     file_name = 'list.txt'
-    contents = ""
-    with open(file_name, encoding='utf8') as f:
-        for line in f:
-            contents += line
-            print(f"Loaded keywords: {contents}")
-    key_list = contents.split()
-    return key_list
+
+
+class CompanyNameSelector:
+    _company_name = ""
+
+    def set_company_name(self):
+        # self.company_name = input("Set company name: ")
+        self._company_name = "Premium Solutions"  # Used only for Debug
+
+    def get_company_name(self):
+        return self._company_name
+
+
+class CookieSelector:
+    locator = "L2AGLb"
+    finder = By.ID
+
+
+class SearchBarSelector:
+    locator = 'q'
+    finder = By.NAME
+
+
+class CompanyCardSelector:
+    locator = "sATSHe"
+    finder = By.CLASS_NAME
+
+
+class BasePageSelector:
+    locator = "https://www.google.com/"
+
+
+class CorrectPageSelector:
+    locator = "div.liYKde.g.VjDLd"
+    finder = By.CSS_SELECTOR
+
+
+class LinkTagSelector:
+    locator = 'a'
+    finder = By.TAG_NAME
+
+
+class LinkAttributeSelector:
+    locator = "href"
+
+
+class MapSiteButtonSelector:
+    locator = "a.yYlJEf.Q7PwXb.L48Cpd.brKmxb"
+    finder = By.CSS_SELECTOR
+
+
+class BasePage:
+    def __init__(self, driver_initializer):
+        self.driver = driver_initializer.driver
+
+    def search_target(self, company_name_initializer):
+        self.open_base_page()
+        # self.wait_for_search_bar()
+        self.operate_search_bar(company_name_initializer.get_company_name())
+
+    def find_search_bar(self):
+        search = self.driver.find_element(SearchBarSelector.finder, SearchBarSelector.locator)
+        return search
+
+    def open_base_page(self):
+        self.driver.get(BasePageSelector.locator)
+        search_bar = self.driver.find_element(CookieSelector.finder, CookieSelector.locator)  # Accept cookies
+        search_bar.send_keys(Keys.ENTER)
+
+    def wait_for_search_bar(self):
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((SearchBarSelector.finder, SearchBarSelector.locator))
+            )
+        except:
+            print("Search bar not found, quiting")
+            self.driver.quit()
+
+    def operate_search_bar(self, company_name):
+        search = self.find_search_bar()
+        search.send_keys(company_name)
+        search.send_keys(Keys.ENTER)
+
+
+class SearchPage:
+    def __init__(self, driver_initializer):
+        self.driver = driver_initializer.driver
+
+    def check_if_valid(self):
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((CompanyCardSelector.finder, CompanyCardSelector.locator))
+            )
+        except:
+            print("Unable to find company card")
+            return 0
+        return 1
+
+    def open_similar_search(self):
+        search = self.driver.find_elements(CompanyCardSelector.finder, CompanyCardSelector.locator)
+        search = search[-1]
+
+        link = search.find_element(LinkTagSelector.finder, LinkTagSelector.locator)
+        link_value = link.get_attribute(LinkAttributeSelector.locator)
+
+        print(link_value)  # Only Debug
+        return link_value
+
+
+class MapPage:
+    def __init__(self, driver_initializer, keyword_list):
+        self.driver = driver_initializer.driver
+        self.keyword_list = keyword_list
+
+    def check_if_on_correct_page(self):
+        is_page_found = 1
+        try:
+            if WebDriverWait(self.driver, 3).until(
+                    EC.presence_of_element_located((CorrectPageSelector.finder, CorrectPageSelector.locator))
+            ):
+                print("Unable to locate corresponding map page")
+                is_page_found = 0
+        finally:
+            if not is_page_found:
+                print("No map page!")
+                return 0
+            else:
+                print("Proceeding")
+                return 1
+
+    def operate_map_search(self, link_value):
+        self.driver.get(link_value)
+        if self.check_if_on_correct_page():
+            print("Working")
+            hit_urls = []
+            iterator = 0
+            x = 0
+
+            potential_hits = self.driver.find_elements(MapSiteButtonSelector.finder, MapSiteButtonSelector.locator)
+            print(f"Results found: {len(potential_hits)}")
+            # time.sleep(5) # Use only to debug
+            while iterator < len(potential_hits):
+                hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
+                iterator += 1
+
+            while x < len(hit_urls):  # Used only for debug
+                print(hit_urls[x])
+                print("\n")
+                x += 1
+
+            self.check_hits(hit_urls)
+        else:
+            print("Not working")
+
+    def check_hits(self, hit_list):
+        iterator = 0
+        for i in hit_list:
+            if self.open_hit_page(hit_list[iterator]):
+                print(f"Hit {hit_list[iterator]} is good \n")
+            else:
+                print(f"Hit {hit_list[iterator]} is not good \n")
+            iterator += 1
+
+    def open_hit_page(self, hit):
+        self.driver.get(hit)
+        try:
+            source = self.driver.page_source.lower()
+            iterator = 0
+
+            for x in self.keyword_list:
+                if self.keyword_list[iterator] in source:
+                    return 1
+                iterator += 1
+            return 0
+        except:
+            print(f"Error while opening {hit}")
+            self.driver.close()
 
 
 def main():
-    global driver, company_name, keyword_list
+    driver_initializer = Driver()
 
-    driver = webdriver.Chrome()
-    # initialize_webdriver() # ToDo make it work
-    company_name = input_company_name()
-    keyword_list = load_keywords()
-    search_target()
+    company_name_initializer = CompanyNameSelector()
+    company_name_initializer.set_company_name()
 
-    if check_if_valid():
-        open_similar_search()
-    driver.close()
+    keyword_initializer = KeywordsSelector()
+    keyword_initializer.set_keywords()
+
+    google_search = BasePage(driver_initializer)
+    company_search = SearchPage(driver_initializer)
+    map_search = MapPage(driver_initializer, keyword_initializer.get_keywords())
+
+    google_search.search_target(company_name_initializer)
+
+    if company_search.check_if_valid():
+        # company_search.open_similar_search()
+        map_search.operate_map_search(company_search.open_similar_search())
+    driver_initializer.driver.close()
 
 
 if __name__ == '__main__':
