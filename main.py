@@ -1,3 +1,5 @@
+import xlwt
+from xlwt import Workbook
 from selenium import webdriver
 from selenium.webdriver import Keys
 from selenium.webdriver.support import expected_conditions as EC
@@ -140,6 +142,9 @@ class SearchPage:
 
 
 class MapPage:
+    _hit_urls = []
+    _hit_urls_bools = []
+
     def __init__(self, driver_initializer, keyword_list):
         self.driver = driver_initializer.driver
         self.keyword_list = keyword_list
@@ -164,7 +169,7 @@ class MapPage:
         self.driver.get(link_value)
         if self.check_if_on_correct_page():
             print("Working")
-            hit_urls = []
+            # hit_urls = []
             iterator = 0
             x = 0
 
@@ -172,25 +177,27 @@ class MapPage:
             print(f"Results found: {len(potential_hits)}")
             # time.sleep(5) # Use only to debug
             while iterator < len(potential_hits):
-                hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
+                self._hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
                 iterator += 1
 
-            while x < len(hit_urls):  # Used only for debug
-                print(hit_urls[x])
+            while x < len(self._hit_urls):  # Used only for debug
+                print(self._hit_urls[x])
                 print("\n")
                 x += 1
 
-            self.check_hits(hit_urls)
+            self.check_hits()
         else:
             print("Not working")
 
-    def check_hits(self, hit_list):
+    def check_hits(self):
         iterator = 0
-        for i in hit_list:
-            if self.open_hit_page(hit_list[iterator]):
-                print(f"Hit {hit_list[iterator]} is good \n")
+        for i in self._hit_urls:
+            if self.open_hit_page(self._hit_urls[iterator]):
+                print(f"Hit {self._hit_urls[iterator]} is good \n")
+                self._hit_urls_bools.append(1)
             else:
-                print(f"Hit {hit_list[iterator]} is not good \n")
+                print(f"Hit {self._hit_urls[iterator]} is not good \n")
+                self._hit_urls_bools.append(0)
             iterator += 1
 
     def open_hit_page(self, hit):
@@ -207,6 +214,43 @@ class MapPage:
         except:
             print(f"Error while opening {hit}")
             self.driver.close()
+
+    def get_hit_urls(self):
+        return self._hit_urls
+
+    def get_hit_urls_bools(self):
+        return self._hit_urls_bools
+
+
+class ExportManager:  # ToDo Add option to toggle export on/off
+    @staticmethod
+    def create_workbook(hit_urls, hit_urls_bools):
+        wb = Workbook()
+        iterator = 1
+
+        sheet1 = wb.add_sheet('Scraping Result')
+
+        sheet1.col(0).width = 12000
+        sheet1.col(1).width = 20000
+        # sheet1.col(2).width = 20000
+        header_font = xlwt.Font()
+        header_font.name = 'Arial'
+        header_font.bold = True
+
+        header_style = xlwt.XFStyle()
+        header_style.font = header_font
+
+        sheet1.write(0, 0, 'Company Domain', header_style)
+        sheet1.write(0, 1, 'Is hit good?', header_style)
+        # sheet1.write(0, 2, 'Company Name', header_style)
+
+        while iterator < len(hit_urls):
+            sheet1.write(iterator, 0, hit_urls[iterator - 1])
+            sheet1.write(iterator, 1, hit_urls_bools[iterator - 1])
+            # sheet1.write(iterator, 2, companyDomains[iterator - 1])
+            iterator += 1
+
+        wb.save('company_domains.xls')
 
 
 def main():
@@ -227,6 +271,7 @@ def main():
     if company_search.check_if_valid():
         # company_search.open_similar_search()
         map_search.operate_map_search(company_search.open_similar_search())
+        ExportManager.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools())
     driver_initializer.driver.close()
 
 
