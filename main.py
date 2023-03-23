@@ -1,4 +1,5 @@
 import xlwt
+from selenium.common import NoSuchElementException
 from xlwt import Workbook
 from selenium import webdriver
 from selenium.webdriver import Keys
@@ -98,17 +99,23 @@ class BasePage:
 
     def open_base_page(self):
         self.driver.get(BasePageSelector.locator)
-        search_bar = self.driver.find_element(CookieSelector.finder, CookieSelector.locator)  # Accept cookies
-        search_bar.send_keys(Keys.ENTER)
+        try:
+            search_bar = self.driver.find_element(CookieSelector.finder, CookieSelector.locator)  # Accept cookies
+            search_bar.send_keys(Keys.ENTER)
+        except NoSuchElementException:
+            print("Invalid website provided! Make sure website is https://www.google.com/")
+            self.driver.quit()
+            exit()
 
     def wait_for_search_bar(self):
         try:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((SearchBarSelector.finder, SearchBarSelector.locator))
             )
-        except:
-            print("Search bar not found, quiting")
+        except NoSuchElementException:
+            print("Search bar not found! Make sure website is https://www.google.com/")
             self.driver.quit()
+            exit()
 
     def operate_search_bar(self, company_name):
         search = self.find_search_bar()
@@ -125,7 +132,7 @@ class SearchPage:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((CompanyCardSelector.finder, CompanyCardSelector.locator))
             )
-        except:
+        except NoSuchElementException:
             print("Unable to find company card")
             return 0
         return 1
@@ -214,6 +221,7 @@ class MapPage:
         except:
             print(f"Error while opening {hit}")
             self.driver.close()
+            exit()
 
     def get_hit_urls(self):
         return self._hit_urls
@@ -253,6 +261,8 @@ class ExportManager:  # ToDo Add option to toggle export on/off
         wb.save('company_domains.xls')
 
 
+# class ImportManager: #ToDo Implement Function
+
 def main():
     driver_initializer = Driver()
 
@@ -262,16 +272,16 @@ def main():
     keyword_initializer = KeywordsSelector()
     keyword_initializer.set_keywords()
 
-    google_search = BasePage(driver_initializer)
+    base_search = BasePage(driver_initializer)
     company_search = SearchPage(driver_initializer)
     map_search = MapPage(driver_initializer, keyword_initializer.get_keywords())
 
-    google_search.search_target(company_name_initializer)
+    base_search.search_target(company_name_initializer)
 
     if company_search.check_if_valid():
-        # company_search.open_similar_search()
         map_search.operate_map_search(company_search.open_similar_search())
         ExportManager.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools())
+
     driver_initializer.driver.close()
 
 
