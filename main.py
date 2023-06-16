@@ -1,4 +1,5 @@
 import xlwt
+import multiprocessing
 from selenium.common import NoSuchElementException
 from xlwt import Workbook
 from selenium import webdriver
@@ -8,6 +9,13 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 
 
+# ToDo Fix a rare bug
+
+# ToDo Add log what word was found in hit
+
+# ToDO Add separate iterations based on what we are looking
+
+# ToDo Jedna tabela z branżą (bazowane na liscie slow kluczowych)
 class Driver:
     driver = None
 
@@ -36,7 +44,8 @@ class CompanyNameSelector:
 
     def set_company_name(self):
         # self.company_name = input("Set company name: ")
-        self._company_name = "NSI Glogow"  # Used only for Debug
+        # self._company_name = "Wemeco Poland Sp. z o.o."  # Used only for Debug
+        self._company_name = "Southco Manufacturing Poland"
 
     def get_company_name(self):
         return self._company_name
@@ -121,6 +130,7 @@ class BasePage:
         search = self.find_search_bar()
         search.send_keys(company_name)
         search.send_keys(Keys.ENTER)
+        search.submit()  # ToDo Figure out why it sometimes work diffrently
 
 
 class SearchPage:
@@ -152,14 +162,13 @@ class MapPage:
     _hit_urls = []
     _hit_urls_bools = []
 
-    def __init__(self, driver_initializer, keyword_list):
+    def __init__(self, driver_initializer):
         self.driver = driver_initializer.driver
-        self.keyword_list = keyword_list
 
     def check_if_on_correct_page(self):
         is_page_found = 1
         try:
-            if WebDriverWait(self.driver, 3).until(
+            if WebDriverWait(self.driver, 3).until(  # DOPOPRAWYYYYY!!!
                     EC.presence_of_element_located((CorrectPageSelector.finder, CorrectPageSelector.locator))
             ):
                 print("Unable to locate corresponding map page")
@@ -176,7 +185,6 @@ class MapPage:
         self.driver.get(link_value)
         if self.check_if_on_correct_page():
             print("Working")
-            # hit_urls = []
             iterator = 0
             x = 0
 
@@ -192,36 +200,58 @@ class MapPage:
                 print("\n")
                 x += 1
 
-            self.check_hits()
+            self.run_parallel()
         else:
             print("Not working")
 
-    def check_hits(self):
-        iterator = 0
-        for i in self._hit_urls:
-            if self.open_hit_page(self._hit_urls[iterator]):
-                print(f"Hit {self._hit_urls[iterator]} is good \n")
-                self._hit_urls_bools.append(1)
-            else:
-                print(f"Hit {self._hit_urls[iterator]} is not good \n")
-                self._hit_urls_bools.append(0)
-            iterator += 1
+    def run_parallel(self):
+        function_pool = multiprocessing.Pool(processes=len(self._hit_urls))
 
-    def open_hit_page(self, hit):
-        self.driver.get(hit)
+        for result in function_pool.map(self.check_hits, self._hit_urls):
+            if result == 0:
+                self._hit_urls_bools.append(0)
+            else:
+                self._hit_urls_bools.append(1)
+
+    @staticmethod
+    def check_hits(hit_urls):
+        # ToDo implement starting x number of process here
+        print("Running")
+
+        if MapPage.open_hit_page(hit_urls):
+            print(f"Hit {hit_urls} is good \n")
+            return 1
+        else:
+            print(f"Hit {hit_urls} is not good \n")
+            return 0
+
+    @staticmethod
+    def open_hit_page(hit):
+
+        driver = webdriver.Chrome()
+        print(f"Opening URL: {hit}")
+        driver.set_page_load_timeout(5)  # Close driver if loading takes too long
         try:
-            source = self.driver.page_source.lower()
+            driver.get(hit)
+            source = driver.page_source.lower()
+            function_keyword = KeywordsSelector()
+            function_keyword.set_keywords()
+            function_keywords = function_keyword.get_keywords()
+
             iterator = 0
 
-            for x in self.keyword_list:
-                if self.keyword_list[iterator] in source:
+            for _ in function_keywords:
+                if function_keywords[iterator] in source:
                     return 1
                 iterator += 1
+            # print(MapPage._keyword_list[iterator])
             return 0
         except:
             print(f"Error while opening {hit}")
-            self.driver.close()
-            exit()
+            driver.close()
+            return 0
+            # exit()
+
 
     def get_hit_urls(self):
         return self._hit_urls
@@ -252,7 +282,7 @@ class ExportManager:  # ToDo Add option to toggle export on/off
         sheet1.write(0, 1, 'Is hit good?', header_style)
         # sheet1.write(0, 2, 'Company Name', header_style)
 
-        while iterator < len(hit_urls):
+        while iterator < len(hit_urls) + 1:  # Hardcoded due to indexing reason
             sheet1.write(iterator, 0, hit_urls[iterator - 1])
             sheet1.write(iterator, 1, hit_urls_bools[iterator - 1])
             # sheet1.write(iterator, 2, companyDomains[iterator - 1])
@@ -269,12 +299,9 @@ def main():
     company_name_initializer = CompanyNameSelector()
     company_name_initializer.set_company_name()
 
-    keyword_initializer = KeywordsSelector()
-    keyword_initializer.set_keywords()
-
     base_search = BasePage(driver_initializer)
     company_search = SearchPage(driver_initializer)
-    map_search = MapPage(driver_initializer, keyword_initializer.get_keywords())
+    map_search = MapPage(driver_initializer)
 
     base_search.search_target(company_name_initializer)
 
@@ -287,3 +314,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
