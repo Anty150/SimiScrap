@@ -1,12 +1,13 @@
 import xlwt
 import multiprocessing
-from selenium.common import NoSuchElementException
+from selenium.common import NoSuchElementException, TimeoutException
 from xlwt import Workbook
 from selenium import webdriver
 from selenium.webdriver import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
+import re
 
 
 # ToDo Fix a rare bug
@@ -32,7 +33,7 @@ class KeywordsSelector:
         with open(file_name, encoding='utf8') as f:
             for line in f:
                 contents += line
-                print(f"Loaded keywords: {contents}")
+                # print(f"Loaded keywords: {contents}") # Only for debug
         self._keywords = contents.split()
 
     def get_keywords(self):
@@ -45,7 +46,7 @@ class CompanyNameSelector:
     def set_company_name(self):
         # self.company_name = input("Set company name: ")
         # self._company_name = "Wemeco Poland Sp. z o.o."  # Used only for Debug
-        self._company_name = "Southco Manufacturing Poland"
+        self._company_name = "mzlaser"
 
     def get_company_name(self):
         return self._company_name
@@ -93,6 +94,11 @@ class MapSiteButtonSelector:
     finder = By.CSS_SELECTOR
 
 
+class TimeoutSelector:
+    timeout_time = 8
+    wait_time = 10
+
+
 class BasePage:
     def __init__(self, driver_initializer):
         self.driver = driver_initializer.driver
@@ -118,7 +124,7 @@ class BasePage:
 
     def wait_for_search_bar(self):
         try:
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, TimeoutSelector.wait_time).until(
                 EC.presence_of_element_located((SearchBarSelector.finder, SearchBarSelector.locator))
             )
         except NoSuchElementException:
@@ -139,7 +145,7 @@ class SearchPage:
 
     def check_if_valid(self):
         try:
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, TimeoutSelector.wait_time).until(
                 EC.presence_of_element_located((CompanyCardSelector.finder, CompanyCardSelector.locator))
             )
         except NoSuchElementException:
@@ -161,6 +167,7 @@ class SearchPage:
 class MapPage:
     _hit_urls = []
     _hit_urls_bools = []
+    _hit_urls_nips = []
 
     def __init__(self, driver_initializer):
         self.driver = driver_initializer.driver
@@ -208,29 +215,33 @@ class MapPage:
         function_pool = multiprocessing.Pool(processes=len(self._hit_urls))
 
         for result in function_pool.map(self.check_hits, self._hit_urls):
-            if result == 0:
+            if result[0] == 0:
                 self._hit_urls_bools.append(0)
+                self._hit_urls_nips.append(result[1])
             else:
                 self._hit_urls_bools.append(1)
+                self._hit_urls_nips.append(result[1])
+
 
     @staticmethod
     def check_hits(hit_urls):
         # ToDo implement starting x number of process here
         print("Running")
+        result = MapPage.open_hit_page(hit_urls)
 
-        if MapPage.open_hit_page(hit_urls):
+        if result[0]:
             print(f"Hit {hit_urls} is good \n")
-            return 1
+            return 1, result[1]
         else:
             print(f"Hit {hit_urls} is not good \n")
-            return 0
+            return 0, result[1]
 
     @staticmethod
     def open_hit_page(hit):
 
         driver = webdriver.Chrome()
         print(f"Opening URL: {hit}")
-        driver.set_page_load_timeout(5)  # Close driver if loading takes too long
+        driver.set_page_load_timeout(TimeoutSelector.timeout_time)  # Close driver if loading takes too long
         try:
             driver.get(hit)
             source = driver.page_source.lower()
@@ -242,16 +253,29 @@ class MapPage:
 
             for _ in function_keywords:
                 if function_keywords[iterator] in source:
-                    return 1
+                    for _ in source:
+                        pattern = r'nip[:\-\s]*([0-9\s-]+)'
+                        match = re.search(pattern, source)
+
+                        if match:
+                            value = match.group(1).replace("-", "").replace(" ", "")
+                            if len(value) == 10:
+                                print("NIP found:", value, f" on {hit}")
+                                return 1, value
+                            break
+                    return 1, 'None'
                 iterator += 1
             # print(MapPage._keyword_list[iterator])
-            return 0
+            return 0, 'None'
+        except TimeoutException:
+            print(f"Timeout while opening {hit}")
+            driver.close()
+            return 0, 'None'
+
         except:
             print(f"Error while opening {hit}")
             driver.close()
-            return 0
-            # exit()
-
+            return 0, 'None'
 
     def get_hit_urls(self):
         return self._hit_urls
@@ -259,10 +283,13 @@ class MapPage:
     def get_hit_urls_bools(self):
         return self._hit_urls_bools
 
+    def get_hit_urls_nips(self):
+        return self._hit_urls_nips
+
 
 class ExportManager:  # ToDo Add option to toggle export on/off
     @staticmethod
-    def create_workbook(hit_urls, hit_urls_bools):
+    def create_workbook(hit_urls, hit_urls_bools, hit_urls_nips):
         wb = Workbook()
         iterator = 1
 
@@ -270,7 +297,7 @@ class ExportManager:  # ToDo Add option to toggle export on/off
 
         sheet1.col(0).width = 12000
         sheet1.col(1).width = 20000
-        # sheet1.col(2).width = 20000
+        sheet1.col(2).width = 20000
         header_font = xlwt.Font()
         header_font.name = 'Arial'
         header_font.bold = True
@@ -280,11 +307,13 @@ class ExportManager:  # ToDo Add option to toggle export on/off
 
         sheet1.write(0, 0, 'Company Domain', header_style)
         sheet1.write(0, 1, 'Is hit good?', header_style)
+        sheet1.write(0, 2, 'NIP', header_style)
         # sheet1.write(0, 2, 'Company Name', header_style)
 
         while iterator < len(hit_urls) + 1:  # Hardcoded due to indexing reason
             sheet1.write(iterator, 0, hit_urls[iterator - 1])
             sheet1.write(iterator, 1, hit_urls_bools[iterator - 1])
+            sheet1.write(iterator, 2, hit_urls_nips[iterator - 1])
             # sheet1.write(iterator, 2, companyDomains[iterator - 1])
             iterator += 1
 
@@ -307,11 +336,10 @@ def main():
 
     if company_search.check_if_valid():
         map_search.operate_map_search(company_search.open_similar_search())
-        ExportManager.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools())
+        ExportManager.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(), map_search.get_hit_urls_nips())
 
     driver_initializer.driver.close()
 
 
 if __name__ == '__main__':
     main()
-
