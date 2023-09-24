@@ -1,12 +1,18 @@
-import xlwt
+import os
+import time
+
 import multiprocessing
+import gspread
+from datetime import datetime
+from oauth2client.service_account import ServiceAccountCredentials
 from selenium.common import NoSuchElementException, TimeoutException
-from xlwt import Workbook
 from selenium import webdriver
 from selenium.webdriver import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+
 import re
 
 
@@ -17,11 +23,19 @@ import re
 # ToDO Add separate iterations based on what we are looking
 
 # ToDo Jedna tabela z branżą (bazowane na liscie slow kluczowych)
+class APIKeySelector:
+    key = os.getenv("GOOGLE_API_KEY")  # Insert Your API Key here
+
+
 class Driver:
     driver = None
 
-    def __init__(self):
-        self.driver = webdriver.Chrome()
+    def __init__(self):  # Disable for Debug
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run in headless mode
+        chrome_options.add_argument("--disable-javascript")  # Disable JavaScript
+        chrome_options.add_argument("--disable-gpu")  # Disable GPU rendering
+        self.driver = webdriver.Chrome(options=chrome_options)
 
 
 class KeywordsSelector:
@@ -33,7 +47,7 @@ class KeywordsSelector:
         with open(file_name, encoding='utf8') as f:
             for line in f:
                 contents += line
-                # print(f"Loaded keywords: {contents}") # Only for debug
+                # print("Loaded keywords: {contents}") # Only for debug
         self._keywords = contents.split()
 
     def get_keywords(self):
@@ -46,7 +60,7 @@ class CompanyNameSelector:
     def set_company_name(self):
         # self.company_name = input("Set company name: ")
         # self._company_name = "Wemeco Poland Sp. z o.o."  # Used only for Debug
-        self._company_name = "mzlaser"
+        self._company_name = "mzlaser"  # Insert Company name here
 
     def get_company_name(self):
         return self._company_name
@@ -135,8 +149,14 @@ class BasePage:
     def operate_search_bar(self, company_name):
         search = self.find_search_bar()
         search.send_keys(company_name)
-        search.send_keys(Keys.ENTER)
-        search.submit()  # ToDo Figure out why it sometimes work diffrently
+
+        # Wait for the search button to become clickable
+        WebDriverWait(self.driver, TimeoutSelector.wait_time).until(
+            EC.element_to_be_clickable((SearchBarSelector.finder, SearchBarSelector.locator))
+        )
+
+        # Click the search button
+        search.submit()
 
 
 class SearchPage:
@@ -196,7 +216,7 @@ class MapPage:
             x = 0
 
             potential_hits = self.driver.find_elements(MapSiteButtonSelector.finder, MapSiteButtonSelector.locator)
-            print(f"Results found: {len(potential_hits)}")
+            print("Results found: {len(potential_hits)}")
             # time.sleep(5) # Use only to debug
             while iterator < len(potential_hits):
                 self._hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
@@ -222,7 +242,6 @@ class MapPage:
                 self._hit_urls_bools.append(1)
                 self._hit_urls_nips.append(result[1])
 
-
     @staticmethod
     def check_hits(hit_urls):
         # ToDo implement starting x number of process here
@@ -230,17 +249,23 @@ class MapPage:
         result = MapPage.open_hit_page(hit_urls)
 
         if result[0]:
-            print(f"Hit {hit_urls} is good \n")
+            print("Hit {hit_urls} is good \n")
             return 1, result[1]
         else:
-            print(f"Hit {hit_urls} is not good \n")
+            print("Hit {hit_urls} is not good \n")
             return 0, result[1]
 
     @staticmethod
     def open_hit_page(hit):
 
-        driver = webdriver.Chrome()
-        print(f"Opening URL: {hit}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")  # Run in headless mode
+        chrome_options.add_argument("--disable-javascript")  # Disable JavaScript
+        chrome_options.add_argument("--disable-gpu")  # Disable GPU rendering
+
+        driver = webdriver.Chrome(options=chrome_options)
+
+        print("Opening URL: {hit}")
         driver.set_page_load_timeout(TimeoutSelector.timeout_time)  # Close driver if loading takes too long
         try:
             driver.get(hit)
@@ -260,7 +285,7 @@ class MapPage:
                         if match:
                             value = match.group(1).replace("-", "").replace(" ", "")
                             if len(value) == 10:
-                                print("NIP found:", value, f" on {hit}")
+                                print("NIP found:", value, " on {hit}")
                                 return 1, value
                             break
                     return 1, 'None'
@@ -268,12 +293,12 @@ class MapPage:
             # print(MapPage._keyword_list[iterator])
             return 0, 'None'
         except TimeoutException:
-            print(f"Timeout while opening {hit}")
+            print("Timeout while opening {hit}")
             driver.close()
             return 0, 'None'
 
         except:
-            print(f"Error while opening {hit}")
+            print("Error while opening {hit}")
             driver.close()
             return 0, 'None'
 
@@ -287,42 +312,55 @@ class MapPage:
         return self._hit_urls_nips
 
 
-class ExportManager:  # ToDo Add option to toggle export on/off
+class ExportManagerGSheet:
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
+             "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(
+        "C:\\Users\\Igor\\PycharmProjects\\SimiScrap\\key2.json", scope)  # Insert your Google API credentials here
+
+    client = gspread.authorize(credentials)
+
+    spreadsheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp" \
+                      "=sharing"  # Replace with your Google Sheets link
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
     @staticmethod
     def create_workbook(hit_urls, hit_urls_bools, hit_urls_nips):
-        wb = Workbook()
-        iterator = 1
+        try:
+            # Open the Google Sheets document by URL
+            spreadsheet = ExportManagerGSheet.client.open_by_url(ExportManagerGSheet.spreadsheet_url)
 
-        sheet1 = wb.add_sheet('Scraping Result')
+            # Select the worksheet by title (create it if it doesn't exist)
+            worksheet_title = "Scraping Result - {}".format(ExportManagerGSheet.current_date)
+            try:
+                existing_worksheet = spreadsheet.worksheet(worksheet_title)
+                spreadsheet.del_worksheet(existing_worksheet)
+            except gspread.exceptions.WorksheetNotFound:
+                pass  # Worksheet doesn't exist, so no need to delete
 
-        sheet1.col(0).width = 12000
-        sheet1.col(1).width = 20000
-        sheet1.col(2).width = 20000
-        header_font = xlwt.Font()
-        header_font.name = 'Arial'
-        header_font.bold = True
+            try:
+                worksheet = spreadsheet.worksheet(worksheet_title)
+            except gspread.exceptions.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet(title=worksheet_title, rows="100", cols="10")
 
-        header_style = xlwt.XFStyle()
-        header_style.font = header_font
+            # Update the worksheet with data
+            header_row = [['Company Domain', 'Is hit good?', 'NIP']]
+            worksheet.insert_rows(header_row, 1)
 
-        sheet1.write(0, 0, 'Company Domain', header_style)
-        sheet1.write(0, 1, 'Is hit good?', header_style)
-        sheet1.write(0, 2, 'NIP', header_style)
-        # sheet1.write(0, 2, 'Company Name', header_style)
+            data_to_insert = []
+            for i in range(len(hit_urls)):
+                data_to_insert.append([hit_urls[i], hit_urls_bools[i], hit_urls_nips[i]])
 
-        while iterator < len(hit_urls) + 1:  # Hardcoded due to indexing reason
-            sheet1.write(iterator, 0, hit_urls[iterator - 1])
-            sheet1.write(iterator, 1, hit_urls_bools[iterator - 1])
-            sheet1.write(iterator, 2, hit_urls_nips[iterator - 1])
-            # sheet1.write(iterator, 2, companyDomains[iterator - 1])
-            iterator += 1
+            worksheet.insert_rows(data_to_insert, 2)
 
-        wb.save('company_domains.xls')
+            print("Data successfully exported to Google Sheets.")
 
+        except Exception as e:
+            print("Error while exporting to Google Sheets: {}".format(str(e)))
 
-# class ImportManager: #ToDo Implement Function
 
 def main():
+    start_time = time.time()
     driver_initializer = Driver()
 
     company_name_initializer = CompanyNameSelector()
@@ -336,9 +374,14 @@ def main():
 
     if company_search.check_if_valid():
         map_search.operate_map_search(company_search.open_similar_search())
-        ExportManager.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(), map_search.get_hit_urls_nips())
+        try:
+            ExportManagerGSheet.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(),
+                                                map_search.get_hit_urls_nips())
+        except PermissionError:
+            print("Error while exporting to Google Sheets.")
 
     driver_initializer.driver.close()
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
 if __name__ == '__main__':
