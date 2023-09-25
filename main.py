@@ -41,7 +41,7 @@ class CompanyNamesSelector:
             for line in f:
                 contents += line
                 print(f"Loaded names: {contents}")  # Only for debug
-        self._companyNames = contents.split()
+        self._companyNames = contents.split(", ")
 
     def get_company_name_at_index(self, index):
         try:
