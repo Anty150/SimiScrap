@@ -16,13 +16,6 @@ from selenium.webdriver.chrome.options import Options
 import re
 
 
-# ToDo Fix a rare bug
-
-# ToDo Add log what word was found in hit
-
-# ToDO Add separate iterations based on what we are looking
-
-# ToDo Jedna tabela z branżą (bazowane na liscie slow kluczowych)
 class APIKeySelector:
     key = os.getenv("GOOGLE_API_KEY")  # Insert Your API Key here
 
@@ -32,10 +25,47 @@ class Driver:
 
     def __init__(self):  # Disable for Debug
         chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run in headless mode
-        chrome_options.add_argument("--disable-javascript")  # Disable JavaScript
-        chrome_options.add_argument("--disable-gpu")  # Disable GPU rendering
+        # chrome_options.add_argument("--headless")  # Run in headless mode
+        # chrome_options.add_argument("--disable-javascript")  # Disable JavaScript
+        # chrome_options.add_argument("--disable-gpu")  # Disable GPU rendering
         self.driver = webdriver.Chrome(options=chrome_options)
+
+
+class CompanyNamesSelector:
+    _companyNames = None
+
+    def __init__(self):
+        file_name = CompanyNamesFileSelector.file_name
+        contents = ""
+        with open(file_name, encoding='utf8') as f:
+            for line in f:
+                contents += line
+                print(f"Loaded names: {contents}")  # Only for debug
+        self._companyNames = contents.split()
+
+    def get_company_name_at_index(self, index):
+        try:
+            company_name = self._companyNames[index]
+            print(company_name)
+            return company_name
+        except IndexError as e:
+            print(f"{e}, No name at given index: {index}")
+            return ""
+
+    def get_company_names(self):
+        return self._companyNames
+
+    def __iter__(self):
+        self.index = 0
+        return self
+
+    def __next__(self):
+        if self.index < len(self._companyNames):
+            company_name = self._companyNames[self.index]
+            self.index += 1
+            return company_name
+        else:
+            raise StopIteration
 
 
 class KeywordsSelector:
@@ -47,7 +77,7 @@ class KeywordsSelector:
         with open(file_name, encoding='utf8') as f:
             for line in f:
                 contents += line
-                # print("Loaded keywords: {contents}") # Only for debug
+                # print("Loaded keywords: {contents}")  # Only for debug
         self._keywords = contents.split()
 
     def get_keywords(self):
@@ -57,13 +87,18 @@ class KeywordsSelector:
 class CompanyNameSelector:
     _company_name = ""
 
-    def set_company_name(self):
+    def set_company_name(self, company_name):
         # self.company_name = input("Set company name: ")
         # self._company_name = "Wemeco Poland Sp. z o.o."  # Used only for Debug
-        self._company_name = "mzlaser"  # Insert Company name here
+        # self._company_name = "SABNER"  # Insert Company name here
+        self._company_name = company_name
 
     def get_company_name(self):
         return self._company_name
+
+
+class CompanyNamesFileSelector:
+    file_name = 'name_list.txt'
 
 
 class TextFileSelector:
@@ -211,12 +246,11 @@ class MapPage:
     def operate_map_search(self, link_value):
         self.driver.get(link_value)
         if self.check_if_on_correct_page():
-            print("Working")
             iterator = 0
             x = 0
 
             potential_hits = self.driver.find_elements(MapSiteButtonSelector.finder, MapSiteButtonSelector.locator)
-            print("Results found: {len(potential_hits)}")
+            print(f"Results found: {len(potential_hits)}")
             # time.sleep(5) # Use only to debug
             while iterator < len(potential_hits):
                 self._hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
@@ -228,8 +262,6 @@ class MapPage:
                 x += 1
 
             self.run_parallel()
-        else:
-            print("Not working")
 
     def run_parallel(self):
         function_pool = multiprocessing.Pool(processes=len(self._hit_urls))
@@ -245,14 +277,13 @@ class MapPage:
     @staticmethod
     def check_hits(hit_urls):
         # ToDo implement starting x number of process here
-        print("Running")
         result = MapPage.open_hit_page(hit_urls)
 
         if result[0]:
-            print("Hit {hit_urls} is good \n")
+            print(f"Hit {hit_urls} is good \n")
             return 1, result[1]
         else:
-            print("Hit {hit_urls} is not good \n")
+            print(f"Hit {hit_urls} is not good \n")
             return 0, result[1]
 
     @staticmethod
@@ -265,7 +296,7 @@ class MapPage:
 
         driver = webdriver.Chrome(options=chrome_options)
 
-        print("Opening URL: {hit}")
+        print(f"Opening URL: {hit}")
         driver.set_page_load_timeout(TimeoutSelector.timeout_time)  # Close driver if loading takes too long
         try:
             driver.get(hit)
@@ -285,7 +316,7 @@ class MapPage:
                         if match:
                             value = match.group(1).replace("-", "").replace(" ", "")
                             if len(value) == 10:
-                                print("NIP found:", value, " on {hit}")
+                                print(f"NIP found:", value, f" on {hit}")
                                 return 1, value
                             break
                     return 1, 'None'
@@ -293,12 +324,12 @@ class MapPage:
             # print(MapPage._keyword_list[iterator])
             return 0, 'None'
         except TimeoutException:
-            print("Timeout while opening {hit}")
+            print(f"Timeout while opening {hit}")
             driver.close()
             return 0, 'None'
 
-        except:
-            print("Error while opening {hit}")
+        except Exception as e:
+            print(f"{e}, Error while opening {hit}")
             driver.close()
             return 0, 'None'
 
@@ -361,26 +392,34 @@ class ExportManagerGSheet:
 
 def main():
     start_time = time.time()
-    driver_initializer = Driver()
 
-    company_name_initializer = CompanyNameSelector()
-    company_name_initializer.set_company_name()
+    company_names_initializer = CompanyNamesSelector()
 
-    base_search = BasePage(driver_initializer)
-    company_search = SearchPage(driver_initializer)
-    map_search = MapPage(driver_initializer)
+    for company_name in company_names_initializer:
+        driver_initializer = Driver()
+        company_name_initializer = CompanyNameSelector()
+        company_name_initializer.set_company_name(company_name)
 
-    base_search.search_target(company_name_initializer)
-
-    if company_search.check_if_valid():
-        map_search.operate_map_search(company_search.open_similar_search())
+        print(company_name_initializer.get_company_name())
         try:
-            ExportManagerGSheet.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(),
-                                                map_search.get_hit_urls_nips())
-        except PermissionError:
-            print("Error while exporting to Google Sheets.")
+            base_search = BasePage(driver_initializer)
+            company_search = SearchPage(driver_initializer)
+            map_search = MapPage(driver_initializer)
 
-    driver_initializer.driver.close()
+            base_search.search_target(company_name_initializer)
+
+            if company_search.check_if_valid():
+                map_search.operate_map_search(company_search.open_similar_search())
+                try:
+                    ExportManagerGSheet.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(),
+                                                        map_search.get_hit_urls_nips())
+                except PermissionError:
+                    print("Error while exporting to Google Sheets.")
+            driver_initializer.driver.close()
+        except Exception as e:
+            print(f"Error: {e}")
+            driver_initializer.driver.close()
+
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
