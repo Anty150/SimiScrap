@@ -10,7 +10,7 @@ def run_scraping_code_normal_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
     cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
-    command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address), 0}"
+    command = f"python main.py '{get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)}' 0"
     subprocess.call(command, shell=True)
 
 
@@ -18,7 +18,7 @@ def run_scraping_code_append_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
     cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
-    command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address), 1}"
+    command = f"python main.py '{get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)}' 0"
     subprocess.call(command, shell=True)
 
 

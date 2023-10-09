@@ -495,6 +495,8 @@ def main():
     if len(sys.argv) > 1:
         company_name = sys.argv[1]
         append_mode = sys.argv[2]
+
+        print(company_name)
     else:
         company_name = "Sabner"
         append_mode = 0
