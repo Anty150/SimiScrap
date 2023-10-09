@@ -433,7 +433,9 @@ class ExportManagerGSheet:
     @staticmethod
     def insert_data(map_search, worksheet):
         header_row = [['Company Name', 'Company Domain', 'Is hit good?', 'Email', 'NIP', 'Source']]
-        worksheet.insert_rows(header_row, 1)
+        if worksheet.cell(1, 1).value != 'Company Name':
+            worksheet.insert_rows(header_row, 1)
+
         clean_hit_urls = map_search.get_cleaned_hit_urls()
 
         data_to_insert = []

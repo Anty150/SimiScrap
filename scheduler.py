@@ -10,7 +10,7 @@ def run_scraping_code_normal_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
     cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
-    command = f"python main.py '{get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)}' 0"
+    command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)} 0"
     subprocess.call(command, shell=True)
 
 
@@ -18,7 +18,7 @@ def run_scraping_code_append_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
     cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
-    command = f"python main.py '{get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)}' 0"
+    command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address)} 0"
     subprocess.call(command, shell=True)
 
 
@@ -36,12 +36,12 @@ def get_random_row_number(url, sheet_name):
         spreadsheet = client.open_by_url(url)
         worksheet = spreadsheet.worksheet(sheet_name)
         values = worksheet.col_values(1)
-        max_row = len(values)
+        # max_row = len(values)
 
-        if max_row < 2:
-            return 0  # Stop scheduler
+        # if max_row < 2:
+            # return 0  # Stop scheduler
 
-        random_row_number = random.randint(2, max_row)
+        random_row_number = random.randint(2, 10)
 
         return random_row_number
 
