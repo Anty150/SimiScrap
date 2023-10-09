@@ -2,12 +2,13 @@ import time
 import subprocess
 import schedule
 import gspread
+import random
 from oauth2client.service_account import ServiceAccountCredentials
 
 
 def run_scraping_code_normal_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
-    cell_address = "A2"
+    cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
     command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address), 0}"
     subprocess.call(command, shell=True)
@@ -15,18 +16,42 @@ def run_scraping_code_normal_mode():
 
 def run_scraping_code_append_mode():
     sheet_url = "https://docs.google.com/spreadsheets/d/1_BTRg9Deova90IlbCqcha6kaKOUZhVQyA3YcrNys6Bk/edit?usp=sharing"
-    cell_address = "A2"
+    cell_address = "A" + str(get_random_row_number(sheet_url, 'Podobne'))
 
     command = f"python main.py {get_string_from_google_sheet(sheet_url, 'Podobne', cell_address), 1}"
     subprocess.call(command, shell=True)
 
 
-def get_string_from_google_sheet(url, sheet_name, adress):
-    # Define the scope and credentials
+def get_google_sheet_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name("C:\\Users\\Igor\\PycharmProjects\\SimiScrap\\key2.json",
                                                              scope)
-    client = gspread.authorize(creds)
+    return gspread.authorize(creds)
+
+
+def get_random_row_number(url, sheet_name):
+    client = get_google_sheet_client()
+
+    try:
+        spreadsheet = client.open_by_url(url)
+        worksheet = spreadsheet.worksheet(sheet_name)
+        values = worksheet.col_values(1)
+        max_row = len(values)
+
+        if max_row < 2:
+            return 0  # Stop scheduler
+
+        random_row_number = random.randint(2, max_row)
+
+        return random_row_number
+
+    except Exception as e:
+        print("An error occurred:", e)
+        return 2
+
+
+def get_string_from_google_sheet(url, sheet_name, adress):
+    client = get_google_sheet_client()
 
     try:
         spreadsheet = client.open_by_url(url)

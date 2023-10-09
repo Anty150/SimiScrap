@@ -233,8 +233,10 @@ class MapPage:
                 x += 1
 
             self.run_parallel()
+            return 1
         else:
             print("Not working")
+            return
 
     def run_parallel(self):
         function_pool = multiprocessing.Pool(processes=4)
@@ -492,7 +494,7 @@ def main():
     import sys
     if len(sys.argv) > 1:
         company_name = sys.argv[1]
-        append_mode = int(sys.argv[2])
+        append_mode = sys.argv[2]
     else:
         company_name = "Sabner"
         append_mode = 0
@@ -507,19 +509,18 @@ def main():
         base_search.search_target(company_name_initializer)
 
         if company_search.check_if_valid():
-            map_search.operate_map_search(company_search.open_similar_search())
-            try:
-                if append_mode:
-                    ExportManagerGSheet.append_workbook(
-                        map_search
-                    )
-                else:
-                    ExportManagerGSheet.create_workbook(
-                        map_search
-                    )
-
-            except PermissionError:
-                print("Error while exporting to Google Sheets.")
+            if map_search.operate_map_search(company_search.open_similar_search()):
+                try:
+                    if append_mode:
+                        ExportManagerGSheet.append_workbook(
+                            map_search
+                        )
+                    else:
+                        ExportManagerGSheet.create_workbook(
+                            map_search
+                        )
+                except PermissionError:
+                    print("Error while exporting to Google Sheets.")
 
         driver_initializer.driver.close()
         print("--- %s seconds ---" % (time.time() - start_time))
