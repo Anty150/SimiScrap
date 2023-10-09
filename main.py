@@ -16,6 +16,15 @@ from selenium.webdriver.chrome.options import Options
 import re
 
 
+# Note, the code core functionality currently (searching keywords), does not work, it is due to nip and email scraping
+
+# ToDo Fix a rare bug
+
+# ToDo Add log what word was found in hit
+
+# ToDO Add separate iterations based on what we are looking
+
+# ToDo Jedna tabela z branżą (bazowane na liscie slow kluczowych)
 class APIKeySelector:
     key = os.getenv("GOOGLE_API_KEY")  # Insert Your API Key here
 
@@ -31,43 +40,6 @@ class Driver:
         self.driver = webdriver.Chrome(options=chrome_options)
 
 
-class CompanyNamesSelector:
-    _companyNames = None
-
-    def __init__(self):
-        file_name = CompanyNamesFileSelector.file_name
-        contents = ""
-        with open(file_name, encoding='utf8') as f:
-            for line in f:
-                contents += line
-                print(f"Loaded names: {contents}")  # Only for debug
-        self._companyNames = contents.split(", ")
-
-    def get_company_name_at_index(self, index):
-        try:
-            company_name = self._companyNames[index]
-            print(company_name)
-            return company_name
-        except IndexError as e:
-            print(f"{e}, No name at given index: {index}")
-            return ""
-
-    def get_company_names(self):
-        return self._companyNames
-
-    def __iter__(self):
-        self.index = 0
-        return self
-
-    def __next__(self):
-        if self.index < len(self._companyNames):
-            company_name = self._companyNames[self.index]
-            self.index += 1
-            return company_name
-        else:
-            raise StopIteration
-
-
 class KeywordsSelector:
     _keywords = None
 
@@ -77,7 +49,7 @@ class KeywordsSelector:
         with open(file_name, encoding='utf8') as f:
             for line in f:
                 contents += line
-                # print("Loaded keywords: {contents}")  # Only for debug
+                # print("Loaded keywords: {contents}") # Only for debug
         self._keywords = contents.split()
 
     def get_keywords(self):
@@ -87,18 +59,15 @@ class KeywordsSelector:
 class CompanyNameSelector:
     _company_name = ""
 
-    def set_company_name(self, company_name):
-        # self.company_name = input("Set company name: ")
-        # self._company_name = "Wemeco Poland Sp. z o.o."  # Used only for Debug
-        # self._company_name = "SABNER"  # Insert Company name here
+    def __init__(self, company_name):
         self._company_name = company_name
 
     def get_company_name(self):
         return self._company_name
 
 
-class CompanyNamesFileSelector:
-    file_name = 'name_list.txt'
+class WorksheetTitleSelector:
+    worksheet_title = "Podobne"
 
 
 class TextFileSelector:
@@ -222,6 +191,7 @@ class SearchPage:
 class MapPage:
     _hit_urls = []
     _hit_urls_bools = []
+    _hit_urls_emails = []
     _hit_urls_nips = []
 
     def __init__(self, driver_initializer):
@@ -230,7 +200,7 @@ class MapPage:
     def check_if_on_correct_page(self):
         is_page_found = 1
         try:
-            if WebDriverWait(self.driver, 3).until(  # DOPOPRAWYYYYY!!!
+            if WebDriverWait(self.driver, 3).until(
                     EC.presence_of_element_located((CorrectPageSelector.finder, CorrectPageSelector.locator))
             ):
                 print("Unable to locate corresponding map page")
@@ -246,12 +216,13 @@ class MapPage:
     def operate_map_search(self, link_value):
         self.driver.get(link_value)
         if self.check_if_on_correct_page():
+            print("Working")
             iterator = 0
             x = 0
 
             potential_hits = self.driver.find_elements(MapSiteButtonSelector.finder, MapSiteButtonSelector.locator)
             print(f"Results found: {len(potential_hits)}")
-            # time.sleep(5) # Use only to debug
+
             while iterator < len(potential_hits):
                 self._hit_urls.append(potential_hits[iterator].get_attribute(LinkAttributeSelector.locator))
                 iterator += 1
@@ -262,33 +233,81 @@ class MapPage:
                 x += 1
 
             self.run_parallel()
+        else:
+            print("Not working")
 
     def run_parallel(self):
-        function_pool = multiprocessing.Pool(processes=len(self._hit_urls))
+        function_pool = multiprocessing.Pool(processes=4)
 
         for result in function_pool.map(self.check_hits, self._hit_urls):
             if result[0] == 0:
                 self._hit_urls_bools.append(0)
-                self._hit_urls_nips.append(result[1])
+                self._hit_urls_emails.append(result[1])
+                self._hit_urls_nips.append(result[2])
             else:
                 self._hit_urls_bools.append(1)
-                self._hit_urls_nips.append(result[1])
+                self._hit_urls_emails.append(result[1])
+                self._hit_urls_nips.append(result[2])
+
+    def get_hit_urls(self):  # Added method to access hit URLs
+        return self._hit_urls
+
+    def get_hit_urls_bools(self):
+        return self._hit_urls_bools
+
+    def get_hit_urls_emails(self):
+        return self._hit_urls_emails
+
+    def get_hit_urls_nips(self):
+        return self._hit_urls_nips
+
+    def get_cleaned_hit_urls(self):
+        cleaned_urls = []
+
+        for hit_url in self._hit_urls:
+            # Split the URL based on "://"
+            parts = hit_url.split("://", 1)
+            if len(parts) > 1:
+                domain_parts = parts[1].split("/", 1)
+                cleaned_domain = parts[0] + "://" + domain_parts[0]
+                cleaned_urls.append(cleaned_domain)
+            else:
+                cleaned_urls.append(hit_url)  # If "://" is not found, retain the original URL
+
+        return cleaned_urls
+
+    def get_scraped_company_names_from_url(self):
+        scraped_company_names = []
+
+        for hit_url in self._hit_urls:
+            parts = hit_url.split("://", 1)
+            if len(parts) > 1:
+                if len(parts[1].split("www.")) < 2:
+                    domain_parts = parts[1].split(".", 1)
+                    cleaned_domain = domain_parts[0]
+                    scraped_company_names.append(cleaned_domain)
+                else:
+                    domain_parts = parts[1].split(".")
+                    cleaned_domain = domain_parts[1]
+                    scraped_company_names.append(cleaned_domain)
+            else:
+                scraped_company_names.append(hit_url)  # If "://" is not found, retain the original URL
+
+        return scraped_company_names
 
     @staticmethod
     def check_hits(hit_urls):
-        # ToDo implement starting x number of process here
         result = MapPage.open_hit_page(hit_urls)
 
         if result[0]:
             print(f"Hit {hit_urls} is good \n")
-            return 1, result[1]
+            return 1, result[1], result[2]
         else:
             print(f"Hit {hit_urls} is not good \n")
-            return 0, result[1]
+            return 0, result[1], result[2]
 
     @staticmethod
     def open_hit_page(hit):
-
         chrome_options = Options()
         chrome_options.add_argument("--headless=new")  # Run in headless mode
         chrome_options.add_argument("--disable-javascript")  # Disable JavaScript
@@ -296,58 +315,71 @@ class MapPage:
 
         driver = webdriver.Chrome(options=chrome_options)
 
-        print(f"Opening URL: {hit}")
+        print("Opening URL:", hit)
         driver.set_page_load_timeout(TimeoutSelector.timeout_time)  # Close driver if loading takes too long
         try:
             driver.get(hit)
             source = driver.page_source.lower()
-            function_keyword = KeywordsSelector()
-            function_keyword.set_keywords()
-            function_keywords = function_keyword.get_keywords()
 
-            iterator = 0
+            email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}'  # ToDo implement function doing that
+            email_match = re.search(email_pattern, source)
 
-            for _ in function_keywords:
-                if function_keywords[iterator] in source:
-                    for _ in source:
-                        pattern = r'nip[:\-\s]*([0-9\s-]+)'
-                        match = re.search(pattern, source)
+            nip_pattern = r'nip[:\-\s]*([0-9\s-]+)'
+            nip_match = re.search(nip_pattern, source)
 
-                        if match:
-                            value = match.group(1).replace("-", "").replace(" ", "")
-                            if len(value) == 10:
-                                print(f"NIP found:", value, f" on {hit}")
-                                return 1, value
-                            break
-                    return 1, 'None'
-                iterator += 1
-            # print(MapPage._keyword_list[iterator])
-            return 0, 'None'
+            if email_match and nip_match:
+                email = email_match.group()
+                nip = nip_match.group()
+                print("Email address found:", email, " on", hit)
+                print("NIP found:", MapPage.clear_nip(nip), " on", hit)
+
+                return 1, email, MapPage.clear_nip(nip)
+            if email_match:
+                email = email_match.group()
+                print("Email address found:", email, " on", hit)
+                print("No NIP found on", hit)
+
+                return 1, email, 'None'
+            if nip_match:
+                nip = nip_match.group()
+                print("NIP found:", MapPage.clear_nip(nip), " on", hit)
+                print("No email address found on", hit)
+
+                return 1, 'None', MapPage.clear_nip(nip)
+            else:
+                print("No email address found on", hit)
+                print("No NIP found on", hit)
+
+                return 1, 'None', 'None'
+
         except TimeoutException:
-            print(f"Timeout while opening {hit}")
+            print("Timeout while opening", hit)
             driver.close()
-            return 0, 'None'
+            return 0, 'None', 'None'
 
         except Exception as e:
-            print(f"{e}, Error while opening {hit}")
+            print("Error while opening", hit, ":", str(e))
             driver.close()
-            return 0, 'None'
+            return 0, 'None', 'None'
 
-    def get_hit_urls(self):
-        return self._hit_urls
+    @staticmethod
+    def clear_nip(nip):
+        pattern = r'nip[:\-\s]*([0-9\s-]+)'
 
-    def get_hit_urls_bools(self):
-        return self._hit_urls_bools
+        matches = re.findall(pattern, nip)
 
-    def get_hit_urls_nips(self):
-        return self._hit_urls_nips
+        cleared_nip = ''.join(matches).replace('-', '').replace(' ', '')
+
+        return cleared_nip
 
 
 class ExportManagerGSheet:
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
              "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+
     credentials = ServiceAccountCredentials.from_json_keyfile_name(
-        "C:\\Users\\Igor\\PycharmProjects\\SimiScrap\\key2.json", scope)  # Insert your Google API credentials here
+        "C:\\Users\\Igor\\PycharmProjects\\SimiScrap\\key2.json",
+        scope)  # Insert your Google API credentials here
 
     client = gspread.authorize(credentials)
 
@@ -356,35 +388,98 @@ class ExportManagerGSheet:
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     @staticmethod
-    def create_workbook(hit_urls, hit_urls_bools, hit_urls_nips):
+    def change_sheet_name(worksheet_title):
         try:
-            # Open the Google Sheets document by URL
             spreadsheet = ExportManagerGSheet.client.open_by_url(ExportManagerGSheet.spreadsheet_url)
+            worksheet = None
+            current_datetime = datetime.now()
 
-            # Select the worksheet by title (create it if it doesn't exist)
-            worksheet_title = "Scraping Result - {}".format(ExportManagerGSheet.current_date)
-            try:
-                existing_worksheet = spreadsheet.worksheet(worksheet_title)
-                spreadsheet.del_worksheet(existing_worksheet)
-            except gspread.exceptions.WorksheetNotFound:
-                pass  # Worksheet doesn't exist, so no need to delete
-
+            sheet_name = f"Result {current_datetime.strftime('%d:%m:%y %H:%M:%S')}"
             try:
                 worksheet = spreadsheet.worksheet(worksheet_title)
             except gspread.exceptions.WorksheetNotFound:
-                worksheet = spreadsheet.add_worksheet(title=worksheet_title, rows="100", cols="10")
+                pass  # Worksheet doesn't exist, so no need to clear
 
-            # Update the worksheet with data
-            header_row = [['Company Domain', 'Is hit good?', 'NIP']]
-            worksheet.insert_rows(header_row, 1)
+            if worksheet:
+                worksheet.update_title(sheet_name)
+                print("Worksheet '{}' name updated.".format(worksheet_title))
+            else:
+                print("Worksheet '{}' not found, can't change name.".format(worksheet_title))
 
-            data_to_insert = []
-            for i in range(len(hit_urls)):
-                data_to_insert.append([hit_urls[i], hit_urls_bools[i], hit_urls_nips[i]])
+        except Exception as e:
+            print("Error while changing worksheet name'{}': {}".format(worksheet_title, str(e)))
 
-            worksheet.insert_rows(data_to_insert, 2)
+    @staticmethod
+    def clear_worksheet(worksheet_title):
+        try:
+            spreadsheet = ExportManagerGSheet.client.open_by_url(ExportManagerGSheet.spreadsheet_url)
+            worksheet = None
+            try:
+                worksheet = spreadsheet.worksheet(worksheet_title)
+            except gspread.exceptions.WorksheetNotFound:
+                pass  # Worksheet doesn't exist, so no need to clear
 
-            print("Data successfully exported to Google Sheets.")
+            if worksheet:
+                worksheet.clear()
+                print("Worksheet '{}' cleared successfully.".format(worksheet_title))
+            else:
+                print("Worksheet '{}' not found, no need to clear.".format(worksheet_title))
+
+        except Exception as e:
+            print("Error while clearing worksheet '{}': {}".format(worksheet_title, str(e)))
+
+    @staticmethod
+    def insert_data(map_search, worksheet):
+        header_row = [['Company Name', 'Company Domain', 'Is hit good?', 'Email', 'NIP', 'Source']]
+        worksheet.insert_rows(header_row, 1)
+        clean_hit_urls = map_search.get_cleaned_hit_urls()
+
+        data_to_insert = []
+        for i in range(len(clean_hit_urls)):
+            data_to_insert.append(
+                [map_search.get_scraped_company_names_from_url()[i], clean_hit_urls[i],
+                 map_search.get_hit_urls_bools()[i],
+                 map_search.get_hit_urls_emails()[i],
+                 map_search.get_hit_urls_nips()[i],
+                 'WebScrapping'])
+
+        worksheet.insert_rows(data_to_insert, 2)
+
+    @staticmethod
+    def append_workbook(map_search):
+        try:
+            worksheet_title = WorksheetTitleSelector.worksheet_title
+
+            spreadsheet = ExportManagerGSheet.client.open_by_url(ExportManagerGSheet.spreadsheet_url)
+            try:
+                worksheet = spreadsheet.worksheet(worksheet_title)
+            except gspread.exceptions.WorksheetNotFound:
+                print("Did not found GSheet")
+                return
+
+            ExportManagerGSheet.insert_data(map_search, worksheet)
+
+            print("Data successfully exported to the '{}' worksheet.".format(worksheet_title))
+
+        except Exception as e:
+            print("Error while exporting to Google Sheets: {}".format(str(e)))
+
+    @staticmethod
+    def create_workbook(map_search):
+        try:
+            worksheet_title = WorksheetTitleSelector.worksheet_title
+            ExportManagerGSheet.change_sheet_name(worksheet_title)
+
+            spreadsheet = ExportManagerGSheet.client.open_by_url(ExportManagerGSheet.spreadsheet_url)
+            try:
+                worksheet = spreadsheet.worksheet(worksheet_title)
+            except gspread.exceptions.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet(title=worksheet_title, rows="50",
+                                                      cols="6")
+
+            ExportManagerGSheet.insert_data(map_search, worksheet)
+
+            print("Data successfully exported to the '{}' worksheet.".format(worksheet_title))
 
         except Exception as e:
             print("Error while exporting to Google Sheets: {}".format(str(e)))
@@ -392,35 +487,47 @@ class ExportManagerGSheet:
 
 def main():
     start_time = time.time()
+    driver_initializer = Driver()
 
-    company_names_initializer = CompanyNamesSelector()
+    import sys
+    if len(sys.argv) > 1:
+        company_name = sys.argv[1]
+        append_mode = int(sys.argv[2])
+    else:
+        company_name = "Sabner"
+        append_mode = 0
 
-    for company_name in company_names_initializer:
-        driver_initializer = Driver()
-        company_name_initializer = CompanyNameSelector()
-        company_name_initializer.set_company_name(company_name)
+    company_name_initializer = CompanyNameSelector(company_name)
 
-        print(company_name_initializer.get_company_name())
-        try:
-            base_search = BasePage(driver_initializer)
-            company_search = SearchPage(driver_initializer)
-            map_search = MapPage(driver_initializer)
+    try:
+        base_search = BasePage(driver_initializer)
+        company_search = SearchPage(driver_initializer)
+        map_search = MapPage(driver_initializer)
 
-            base_search.search_target(company_name_initializer)
+        base_search.search_target(company_name_initializer)
 
-            if company_search.check_if_valid():
-                map_search.operate_map_search(company_search.open_similar_search())
-                try:
-                    ExportManagerGSheet.create_workbook(map_search.get_hit_urls(), map_search.get_hit_urls_bools(),
-                                                        map_search.get_hit_urls_nips())
-                except PermissionError:
-                    print("Error while exporting to Google Sheets.")
-            driver_initializer.driver.close()
-        except Exception as e:
-            print(f"Error: {e}")
-            driver_initializer.driver.close()
+        if company_search.check_if_valid():
+            map_search.operate_map_search(company_search.open_similar_search())
+            try:
+                if append_mode:
+                    ExportManagerGSheet.append_workbook(
+                        map_search
+                    )
+                else:
+                    ExportManagerGSheet.create_workbook(
+                        map_search
+                    )
 
-    print("--- %s seconds ---" % (time.time() - start_time))
+            except PermissionError:
+                print("Error while exporting to Google Sheets.")
+
+        driver_initializer.driver.close()
+        print("--- %s seconds ---" % (time.time() - start_time))
+
+    except Exception as e:
+        print(f"Error: as {e}")
+        driver_initializer.driver.close()
+        print("--- %s seconds ---" % (time.time() - start_time))
 
 
 if __name__ == '__main__':
